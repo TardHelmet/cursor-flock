@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multiplayer Cursor Flock</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="cursor-container"></div>
+    <script src="script.js"></script>
+    <script>
+        // Initialize WebSocket connection
+        const ws = new WebSocket(`ws://${window.location.hostname}:3000`);
+        let myColor = '#ff3333'; // Default color until server assigns one
+        let myId = null;
+        const otherPlayers = new Map(); // Track other players' flocks
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            
+            switch(data.type) {
+                case 'init':
+                    // Receive assigned color and ID from server
+                    myColor = data.color;
+                    myId = data.id;
+                    // Initialize our flock with our color
+                    window.myFlock = new CursorFlock(myColor, true);
+                    break;
+
+                case 'newUser':
+                    // Create a new flock for the new user
+                    if (data.id !== myId) {
+                        otherPlayers.set(data.id, new CursorFlock(data.color, false));
+                    }
+                    break;
+
+                case 'cursorUpdate':
+                    // Update other player's cursor positions
+                    if (data.id !== myId && otherPlayers.has(data.id)) {
+                        otherPlayers.get(data.id).updateFromServer(data);
+                    }
+                    break;
+
+                case 'userLeft':
+                    // Remove disconnected user's flock
+                    if (otherPlayers.has(data.id)) {
+                        otherPlayers.get(data.id).cleanup();
+                        otherPlayers.delete(data.id);
+                    }
+                    break;
+            }
+        };
+
+        // Send cursor updates to server
+        function broadcastUpdate(data) {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'cursorUpdate',
+                    ...data
+                }));
+            }
+        }
+    </script>
+</body>
+</html>
